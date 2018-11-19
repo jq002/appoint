@@ -26,17 +26,20 @@ function Promise (resolver) {
     safelyResolveThen(this, resolver)
   }
 }
-
+//参数不是函数，则值穿透
 Promise.prototype.then = function (onFulfilled, onRejected) {
   if ((!isFunction(onFulfilled) && this.state === FULFILLED) ||
     (!isFunction(onRejected) && this.state === REJECTED)) {
     return this
   }
+  //创建then返回的新的promise函数
   const promise = new this.constructor(INTERNAL)
   if (this.state !== PENDING) {
+    //异步执行函数已经执行完毕
     const resolver = this.state === FULFILLED ? onFulfilled : onRejected
     unwrap(promise, resolver, this.value)
   } else {
+    //异步函数还未执行完毕，promise加入当前回调队列queue
     this.queue.push(new QueueItem(promise, onFulfilled, onRejected))
   }
   return promise
@@ -47,6 +50,7 @@ Promise.prototype.catch = function (onRejected) {
 }
 
 function QueueItem (promise, onFulfilled, onRejected) {
+  //
   this.promise = promise
   this.callFulfilled = function (value) {
     doResolve(this.promise, value)
@@ -65,9 +69,9 @@ function QueueItem (promise, onFulfilled, onRejected) {
     }
   }
 }
-
+//保证then异步执行，且执行then()的promise，即子promise
 function unwrap (promise, func, value) {
-  process.nextTick(function () {
+  process.nextTick(function () {//then方法一定异步执行
     let returnValue
     try {
       returnValue = func(value)
@@ -82,7 +86,8 @@ function unwrap (promise, func, value) {
   })
 }
 
-function doResolve (self, value) {
+//设置异步执行函数的状态和值，调用成功回调（或执行父回调返回的promise，或执行子promise）
+function doResolve (self, value) {//value ===promise立即执行函数
   try {
     const then = getThen(value)
     if (then) {
@@ -90,8 +95,9 @@ function doResolve (self, value) {
     } else {
       self.state = FULFILLED
       self.value = value
+      //执行then注册的成功函数回调
       self.queue.forEach(function (queueItem) {
-        queueItem.callFulfilled(value)
+        queueItem.callFulfilled(value)//callFulfilled===then注册的成功回调函数
       })
     }
     return self
@@ -99,10 +105,11 @@ function doResolve (self, value) {
     return doReject(self, error)
   }
 }
-
+//设置异步执行函数的状态和值，调用失败回调
 function doReject (self, error) {
   self.state = REJECTED
   self.value = error
+  //执行then注册的失败函数回调
   self.queue.forEach(function (queueItem) {
     queueItem.callRejected(error)
   })
@@ -117,24 +124,26 @@ function getThen (promise) {
     }
   }
 }
-
+//执行promise的立即执行函数，调用doResolve，doReject方法
 function safelyResolveThen (self, then) {
-  let called = false
+  
+  let called = false//保证只执行一次成功回调或者失败回调，多次调用promise.then没事
   try {
-    then(function (value) {
+    //promise的立即执行的函数
+    then(function (value) {//异步操作成功的resolve()调用
       if (called) {
         return
       }
       called = true
       doResolve(self, value)
-    }, function (error) {
+    }, function (error) {//异步操作失败调用的函数
       if (called) {
         return
       }
       called = true
       doReject(self, error)
     })
-  } catch (error) {
+  } catch (error) {//调用立即执行函数报错的捕获
     if (called) {
       return
     }
