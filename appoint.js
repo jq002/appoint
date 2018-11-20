@@ -22,7 +22,7 @@ function Promise (resolver) {
   this.state = PENDING
   this.value = void 0
   this.queue = []
-  if (resolver !== INTERNAL) {
+  if (resolver !== INTERNAL) {//内部创建的promise，不会执行函数，状态一直pending，直到调用doResolve()
     safelyResolveThen(this, resolver)
   }
 }
